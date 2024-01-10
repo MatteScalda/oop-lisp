@@ -14,15 +14,15 @@
         (cond ((or (stringp class-name)
                 (null class-name) 
                 (not (listp parents))) 
-            (error (format nil "Error: Class-name or Parents invalid.")))
-            (t (add-class-spec class-name (list parents parts)) class-name)
+            (error (format nil "Error [def-class]: Class-name or Parents invalid.")))
+            (t (add-class-spec class-name (append (list parents) (list parts))) class-name)
         )
 )
 
 ;;; make: crea un'istanza di una classe.
 (defun make (class-name &rest parts) 
     (cond 
-        ((not (is-class class-name))) (error (format nil "Error: Class-name invalid."))
+        ((not (is-class class-name))) (error (format nil "Error [make]: Class-name invalid."))
     )
     (append (list 'oolinst)
             (list class-name)
@@ -44,32 +44,36 @@
 ;;; is-instance: restituisce T se l'oggetto passatogli è l'istanza
 ;;; di una classe.
 (defun is-instance (value &optional (class-name T)) 
-    (cond ((and (equal (car value) 'OOLINST) 
+    (cond ((and (equal (first value) 'OOLINST) 
                 (equal class-name 'T)) T) 
-          ((equal (cadr value) class-name) T) 
+          ((equal (second value) class-name) T) 
           ;; Ereditarietà 
-          ((member class-name (cadr (get-class-spec (cadr value)))) T))
+          ;;((member class-name (cadr (get-class-spec (cadr value)))) T)
+          )
 )
 ;;; field: restituisce il valore di un campo di un'istanza.
 (defun field (instance field-name)
-    (cond ((or 
-        (not (is-instance instance))
-        (null field-name))
-        (error "Error: Instance-name or Field-name invalid."))
+    (cond 
+        ((or 
+            (not (is-instance instance))
+            (null field-name))
+            (error "Error [field]: Instance-name or Field-name invalid.")
+        )
         (t
-            (let ((fields (first(third instance))))
-                (extract-field fields field-name)
+            (let 
+                ((field (third instance)))
+                (extract-field field field-name)
             )
         )
     )
 )
 
 ;;; extract-field: estrae il valore di un campo //TODO: non funziona 
-(defun extract-field (fields field-name)
+(defun extract-field (field field-name)
     (cond
-        ((null fields) (error "Error: Field-name not found."))
-        ((string= (first (first fields)) field-name) (second (first fields)))
-        (t (extract-field (rest fields) field-name))))
+        ((null field) (error "Error [extract-field]: Field invalid."))
+        ((equal (first (first field)) field-name) (second (first field)))
+        (t (extract-field (rest field) field-name))))
 
 ;;//TODO: implementare field*
 
