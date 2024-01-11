@@ -21,7 +21,7 @@
                     (append 
                         (list class-name)
                         (list parents) 
-                        (list parts)
+                        parts
                     )
                 ) class-name)
         )
@@ -29,14 +29,37 @@
 
 ;;; make: crea un'istanza di una classe.
 (defun make (class-name &rest parts) 
-    ;; Non instanzio metodi non esistenti nella classe 
     (cond 
-        ((not (is-class class-name)) (error "La classe non esiste"))                         
-        (t (append (list 'oolinst) 
-                 (list class-name 
-                        (check-field-exists class-name parts)))
+    ;;controllo che il primo elemento della terza lista sia il simbolo 'fields
+        ((not (equal (caaddr (class-spec class-name)) 'fields)) 
+            (let (class-fields (cdaddr (class-spec class-name))) (instantiate class-name class-fields))) 
+    ;; altrimenti se il primo elemento della terza lista è il simbolo 'fields
+        (t (let (class-fields (cdadar (class-spec class-name))) (instantiate class-name class-fields)))
+    )
+)
+
+(defun instantiate (class-name class-fields)
+    (let ((valid-parts (check-field-exists class-name class-fields)))
+        (cond 
+            ((not (is-class class-name)) (error "[instatiate] La classe non esiste"))                         
+            (t (append (list 'oolinst) 
+                    (list class-name 
+                            (replace-fields valid-parts class-fields)))
+            )
         )
     )
+)
+
+;;; replace-fields: sostituisce i ogni campo di class-fields con il
+;;; valore associato a field-name nella lista fields, se presente.
+(defun replace-fields (fields class-fields)
+    (write class-fields)
+    (mapcar 
+        (lambda (field)
+            (if (member (first field) (mapcar #'first fields))
+                (assoc (first field) fields)
+                field))
+                class-fields)
 )
 
 ;;; get-class-field: estrae il valore dello slot-name specificato dalla
@@ -50,26 +73,29 @@
         ((get-parent-field (get-parents class) field-name))
         ((error 
             (format nil 
-                "Error: no method or field named ~a found." field-name))))
+                "Error [get-class-field]: no method or field named ~a found." field-name))))
 )
 
 ;;; check-field-exists: controlla se ogni field nella lista di fields passata
 ;;; come argomento sono presenti nella class specificata.
 ;;; Se i fields esistono viene restituita una cons contenente tutti i
 ;;; fields validi, altrimenti la funzione segnala un errore
-(defun check-field-exists (class-name parts) 
-    (cond ((null parts) nil) 
-            ((get-class-field class (caar parts)) 
-             (cons (caar parts) 
-                  (cons (cadar parts) (check-field-exists class (cddar parts)))))
-            (T (check-field-exists class (cddar parts)))
+(defun check-field-exists (class-name fields) 
+    (cond ((null fields) nil) 
+            ((not (null fields)) 
+             (cons fields 
+                  (cons (cadr fiels) (check-field-exists class-name (cddr parts)))))
+            (T (check-field-exists class-name (cddr parts)))
     )
 )
-;;; '(fields () () ()) '(methods () ())
+;;; (def-class 'person nil '(fields () () ()) '(methods () ())))
 
 ;;; is-class: verifica se un simbolo è il nome di una classe.
 (defun is-class (class-name) 
-    (if (class-spec class-name) T (error "La classe non esiste"))
+    (cond 
+        ((null (class-spec class-name)) (error "[is-class] La classe non esiste"))
+        (t t)
+    )
 )
 
 ;;; is-instance: restituisce T se l'oggetto passatogli è l'istanza
