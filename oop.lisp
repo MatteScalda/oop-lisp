@@ -10,6 +10,7 @@
     
 ;;; def-class: definisce la struttura di una classe e la
 ;;; memorizza in una locazione centralizzata (una variabile globale).
+;;; //TODO: mettere T come type di default ai fields
 (defun def-class (class-name parents &rest parts) 
         (cond 
             ((or (not (atom class-name))
@@ -34,7 +35,7 @@
         ((not (equal (caaddr (class-spec class-name)) 'fields)) 
             (let (class-fields (cdaddr (class-spec class-name))) (instantiate class-name class-fields))) 
     ;; altrimenti se il primo elemento della terza lista è il simbolo 'fields
-        (t (let (class-fields (cdadar (class-spec class-name))) (instantiate class-name class-fields)))
+        (t (let ((class-fields (cdaddr (class-spec class-name)))) (instantiate class-name class-fields)))
     )
 )
 
@@ -53,7 +54,6 @@
 ;;; replace-fields: sostituisce i ogni campo di class-fields con il
 ;;; valore associato a field-name nella lista fields, se presente.
 (defun replace-fields (fields class-fields)
-    (write class-fields)
     (mapcar 
         (lambda (field)
             (if (member (first field) (mapcar #'first fields))
@@ -84,8 +84,8 @@
     (cond ((null fields) nil) 
             ((not (null fields)) 
              (cons fields 
-                  (cons (cadr fiels) (check-field-exists class-name (cddr parts)))))
-            (T (check-field-exists class-name (cddr parts)))
+                  (cons (cadr fields) (check-field-exists class-name (cddr fields)))))
+            (T (check-field-exists class-name (cddr fields)))
     )
 )
 ;;; (def-class 'person nil '(fields () () ()) '(methods () ())))
@@ -112,15 +112,18 @@
 ;;; field: estrae il valore di un campo da una classe.
 ;;; Se field-name non è presente nella classe dell'istanza
 ;;; viene segnalato un errore.
+;;; //TODO: se il field cercato non è passato nella make oppure è un field di una classe padre NON LO TROVA
 (defun field (instance field-name)
     ;; Se l'instanza non ha lo fieldname, vedi la sua classe 
-        (cond ((get-data instance field-name)) 
+        (cond ((not (null (get-data instance field-name))) (car (get-data instance field-name))) 
             ;; Se la classe non ha lo fieldname cerca nei padri 
             ((get-data (class-spec (cadr instance)) field-name))
             ((get-parent-field (get-parents (cadr instance)) field-name))
             ((error 
                 (format nil 
-                    "Error: no method or field named ~a found." field-name))))
+                    "Error: no method or field named ~a found." field-name)))
+            
+        )
 )
 
 ;;; field*: estrae il valore da una classe percorrendo una catena di attributi.
@@ -156,7 +159,7 @@
          ;; Se è nil ma esistente 
          (if (null (cdar instance)) "undefined" (cdar instance))) 
         ;; Altrimenti 
-        (T (get-data (cdr instance) field-name)))
+        (T (get-data (list (cadr instance)) field-name)))
 )
 
 
