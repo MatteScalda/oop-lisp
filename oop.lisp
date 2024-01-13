@@ -1,4 +1,6 @@
 ;;;FUNZIONI PRINCIPALI
+;;//TODO: aggiungere il supporto per i metodi
+;;//TODO: aggiungere il supporto per i tipi di fields
 
 ;;; make-hash-table e gethash manipolano le hash tables in Common Lisp.
 ;;; La forma di class-spec è un dettaglio implementativo.
@@ -33,16 +35,17 @@
     (cond 
     ;; se il primo elemento della terza lista è il simbolo 'fields
         (t (let ((class-fields (cdaddr (class-spec class-name)))) 
-                (instantiate class-name class-fields)
+                (instantiate class-name class-fields parts)
             )
         )
     )
 )
 
+;;;valid parts è null se sia padre che figlio non hanno fields
 ;;ROBOCOP VERSION
-(defun instantiate (class-name class-fields)
+(defun instantiate (class-name class-fields parts)
   (let ((valid-parts (remove-duplicates 
-                      (append class-fields (check-field-exists class-name class-fields))
+                      (append (check-field-exists class-name class-fields) (split-in-pairs parts))
                       :test #'(lambda (x y) (equal (car x) (car y))))))
     (cond 
       ((not (is-class class-name)) (error "[instantiate] La classe non esiste"))
@@ -52,6 +55,11 @@
     )
   )
 )
+
+(defun split-in-pairs (lst)
+  (if (null lst)
+      nil
+      (cons (subseq lst 0 2) (split-in-pairs (subseq lst 2)))))
 
 ;;; get-class-field: estrae il valore dello field-name specificato dalla
 ;;; classe desiderata. Se field-name non è presente nella classe,
@@ -97,9 +105,17 @@
                 (equal class-name 'T)) T) 
           ((equal (second value) class-name) T) 
           ;; Ereditarietà 
-          ((member class-name (cadr (get-class-spec (cadr value)))) T)
-          )
+          ((member class-name (cadr (class-spec (cadr value)))) T)
+          (t (is-child-of (cadr value) class-name))
+    )
 )
+(defun is-child-of (class-child class-parent)
+    (cond ((null class-child) nil)
+          ((equal class-child class-parent) T)
+          ((is-child-of (car (get-parents class-child)) class-parent) T)
+    )
+)
+
 
 ;;; field: estrae il valore di un campo da una classe.
 ;;; Se field-name non è presente nella classe dell'istanza
