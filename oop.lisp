@@ -1,4 +1,4 @@
-;;FUNZIONI PRINCIPALI
+;;;FUNZIONI PRINCIPALI
 
 ;;; make-hash-table e gethash manipolano le hash tables in Common Lisp.
 ;;; La forma di class-spec è un dettaglio implementativo.
@@ -12,60 +12,51 @@
 ;;; memorizza in una locazione centralizzata (una variabile globale).
 ;;; //TODO: mettere T come type di default ai fields
 (defun def-class (class-name parents &rest parts) 
-        (cond 
-            ((or (not (atom class-name))
-                (null class-name) 
-                (not (listp parents))) 
-                (error (format nil "Error [def-class]: Class-name or Parents invalid.")))
-            (t 
-                (add-class-spec class-name 
-                    (append 
-                        (list class-name)
-                        (list parents) 
-                        parts
-                    )
-                ) class-name)
-        )
+    (cond 
+        ((or (not (atom class-name))
+            (null class-name) 
+            (not (listp parents))) 
+            (error (format nil "Error [def-class]: Class-name or Parents invalid.")))
+        (t  (add-class-spec class-name 
+                (append 
+                    (list class-name)
+                    (list parents) 
+                    (list (append (list 'fields) (remove-duplicates (unify-parts (append (get-classes-parts parents) parts) 'fields) :test #'(lambda (x y) (equal (car x) (car y))))))
+                    (list (append (list 'methods) (remove-duplicates (unify-parts (append (get-classes-parts parents) parts) 'methods) :test #'(lambda (x y) (equal (car x) (car y))))))
+                )
+            ) class-name)
+    )
 )
 
 ;;; make: crea un'istanza di una classe.
 (defun make (class-name &rest parts) 
     (cond 
-    ;;controllo che il primo elemento della terza lista sia il simbolo 'fields
-        ((not (equal (caaddr (class-spec class-name)) 'fields)) 
-            (let (class-fields (cdaddr (class-spec class-name))) (instantiate class-name class-fields))) 
-    ;; altrimenti se il primo elemento della terza lista è il simbolo 'fields
-        (t (let ((class-fields (cdaddr (class-spec class-name)))) (instantiate class-name class-fields)))
-    )
-)
-
-(defun instantiate (class-name class-fields)
-    (let ((valid-parts (check-field-exists class-name class-fields)))
-        (cond 
-            ((not (is-class class-name)) (error "[instatiate] La classe non esiste"))                         
-            (t (append (list 'oolinst) 
-                    (list class-name 
-                            (replace-fields valid-parts class-fields)))
+    ;; se il primo elemento della terza lista è il simbolo 'fields
+        (t (let ((class-fields (cdaddr (class-spec class-name)))) 
+                (instantiate class-name class-fields)
             )
         )
     )
 )
 
-;;; replace-fields: sostituisce i ogni campo di class-fields con il
-;;; valore associato a field-name nella lista fields, se presente.
-(defun replace-fields (fields class-fields)
-    (mapcar 
-        (lambda (field)
-            (if (member (first field) (mapcar #'first fields))
-                (assoc (first field) fields)
-                field))
-                class-fields)
+;;ROBOCOP VERSION
+(defun instantiate (class-name class-fields)
+  (let ((valid-parts (remove-duplicates 
+                      (append class-fields (check-field-exists class-name class-fields))
+                      :test #'(lambda (x y) (equal (car x) (car y))))))
+    (cond 
+      ((not (is-class class-name)) (error "[instantiate] La classe non esiste"))
+      ((null valid-parts) (error "[instantiate] I fields non sono validi"))     
+      (t (append (list 'oolinst) 
+                 (list class-name valid-parts)))
+    )
+  )
 )
 
-;;; get-class-field: estrae il valore dello slot-name specificato dalla
-;;; classe desiderata. Se slot-name non è presente nella classe,
+;;; get-class-field: estrae il valore dello field-name specificato dalla
+;;; classe desiderata. Se field-name non è presente nella classe,
 ;;; viene cercato nei parents della classe.
-;;; Se non è presente lo slot-name nella classe o nei parents, la
+;;; Se non è presente lo field-name nella classe o nei parents, la
 ;;; funzione segnala un errore.
 (defun get-class-field (class field-name) 
     (cond ((get-data (class-spec class) field-name)) 
@@ -80,13 +71,14 @@
 ;;; come argomento sono presenti nella class specificata.
 ;;; Se i fields esistono viene restituita una cons contenente tutti i
 ;;; fields validi, altrimenti la funzione segnala un errore
+
+;;ROBOCOP VERSION
 (defun check-field-exists (class-name fields) 
-    (cond ((null fields) nil) 
-            ((not (null fields)) 
-             (cons fields 
-                  (cons (cadr fields) (check-field-exists class-name (cddr fields)))))
-            (T (check-field-exists class-name (cddr fields)))
-    )
+  (cond ((null fields) nil) 
+        ((member (car fields) (cdaddr (class-spec class-name))) 
+         (cons (car fields) (check-field-exists class-name (cdr fields))))
+        (t (check-field-exists class-name (cdr fields)))
+  )
 )
 ;;; (def-class 'person nil '(fields () () ()) '(methods () ())))
 
@@ -176,14 +168,18 @@
     )
 )
 
-;;; get-parent-field: restituisce il valore del primo field-name presente
-;;; nelle classi parents passate come lista. In pratica se uno field-name
-;;; non è presente in uno dei parents, va a cercarlo ed eventualmente
-;;; ereditarlo dalla prossima classe della lista parents.
-(defun get-parent-field (parents field-name) 
-    (cond ((null parents) nil) 
-        ((null (get-data (class-spec (car parents)) field-name)) 
-            (get-parent-field (cdr parents) field-name))
-        ((get-data (class-spec (car parents)) field-name))
+(defun get-classes-parts (class-names) 
+    (cond ((null class-names) nil) 
+        ((append (cdr (class-spec (car class-names))) 
+                 (get-classes-parts (cdr class-names))))
     )
 )
+
+;;; unify-parts: unisce tutte le liste del tipo passato in una lista unica.
+(defun unify-parts (separated-parts part-type)
+    (cond ((null separated-parts) nil)
+        (t (let ((first-element (car separated-parts))
+                   (f-e-type (car (car separated-parts))))
+               (cond ((equal f-e-type part-type) 
+                      (append (cdr first-element) (unify-parts (cdr separated-parts) part-type)))
+                     (t (unify-parts (cdr separated-parts) part-type)))))))
