@@ -18,16 +18,16 @@
                        (list class-name)
                        (list parents) 
                        (list (append (list 'fields) 
-                                (remove-duplicates 
+                                (add-type (remove-duplicates 
                               (unify-parts 
                                (append (get-classes-parts parents) parts) 
                                 'fields) 
                                 :test #'(lambda (x y) 
-                              (equal (car x) (car y))))))
+                              (equal (car x) (car y)))))))
                        (list (append (list 'methods) 
                                     (remove-duplicates 
                                     (unify-parts 
-                                    (append (get-classes-parts parents) parts) 
+                                    (append (get-classes-parts parents) parts)
                                    'methods) 
                                     :test #'(lambda (x y) 
                                     (equal (car x) (car y))))))
@@ -35,14 +35,35 @@
             ) class-name)
    )
 )
+;;((name "ciao") (age 21 integer))
+(defun add-type (fields) 
+  (mapcar 
+  #'(lambda (x) 
+      (cond 
+        ((null (caddr x)) (append x (list 'T)))
+        (T x)
+      )
+    ) fields)
+)
 
 (defun make (class-name &rest parts) 
   (cond 
    (t (let ((class-fields (cdaddr (class-spec class-name)))) 
         (instantiate class-name class-fields parts)
-        )
-    )
+      )
    )
+  )
+)
+
+(defun check-fields-type (red-fields class) 
+  (cond 
+   ((null red-fields) T)
+   ((and (not (is-instance (cadar red-fields) class))
+        (not (typep (cadar red-fields) (caddr (get-class-field class (caar red-fields))))))
+    (error (format nil "[check-fields-type]: Field ~a is not of right type." 
+                   (caar red-fields))))
+   (T (check-fields-type (cdr red-fields) class))
+  )
 )
 
 (defun instantiate (class-name class-fields parts)
@@ -52,7 +73,8 @@
                       :test #'(lambda (x y) (equal (car x) (car y))))))
     (cond 
      ((not (is-class class-name)) (error "[instantiate] La classe non esiste"))
-     ((null valid-parts) (error "[instantiate] I fields non sono validi"))     
+     ((null valid-parts) (error "[instantiate] I fields non sono validi"))   
+     ((not (check-fields-type valid-parts class-name)) (error (format nil "[instantiate] I fields non sono validi")))
      (t (append (list 'oolinst) 
                 (list class-name valid-parts)))
      )
@@ -65,12 +87,15 @@
       (cons (subseq lst 0 2) (split-in-pairs (subseq lst 2)))))
 
 (defun get-class-field (class field-name) 
-  (cond ((get-data (class-spec class) field-name)) 
-        ((get-parent-field (get-parents class) field-name))
-        ((error 
-          (format nil 
-                  "Error [get-class-field]: no method or field named ~a found." 
-                  field-name))))
+  (let ((class-fields (cdr (caddr (class-spec class)))))
+    (extract-field class-fields field-name)
+  )
+)
+(defun extract-field (fields field-name)
+  (cond ((null fields) nil)
+        ((equal (caar fields) field-name) (car fields))
+        (T (extract-field (cdr fields) field-name))
+  )
 )
 
 (defun check-field-exists (class-name fields) 
@@ -89,7 +114,8 @@
 )
 
 (defun is-instance (value &optional (class-name T)) 
-  (cond ((and (equal (first value) 'OOLINST) 
+  (cond ((not (listp value)) nil)
+        ((and (equal (first value) 'OOLINST) 
               (equal class-name 'T)) T) 
         ((equal (second value) class-name) T) 
         ((member class-name (cadr (class-spec (cadr value)))) T)
@@ -108,7 +134,6 @@
   (cond ((not (null (get-data instance field-name))) 
          (car (get-data instance field-name))) 
         ((get-data (class-spec (cadr instance)) field-name))
-        ((get-parent-field (get-parents (cadr instance)) field-name))
         ((error 
           (format nil 
                   "Error: no method or field named ~a found." field-name)))
@@ -139,7 +164,7 @@
          (equal (intern (symbol-name (caar instance))) 
                 (intern (symbol-name field-name)))) 
     (if (null (cdar instance)) "undefined" (cdar instance))) 
-   (T (get-data (list (cadr instance)) field-name)))
+   (T (get-data (cdr instance) field-name)))
 )
 
 (defun get-parents (class) 
