@@ -19,22 +19,29 @@
                        (list parents) 
                        (list (append (list 'fields) 
                                 (add-type (remove-duplicates 
-                              (unify-parts 
-                               (append (get-classes-parts parents) parts) 
-                                'fields) 
-                                :test #'(lambda (x y) 
-                              (equal (car x) (car y)))))))
+                                           (unify-parts 
+                                            (append (get-classes-parts parents) parts) 
+                                            'fields) 
+                                           :test #'(lambda (x y) 
+                                                     (equal (car x) (car y)))))))
                        (list (append (list 'methods) 
                                     (remove-duplicates 
-                                    (unify-parts 
-                                    (append (get-classes-parts parents) parts)
-                                   'methods) 
-                                    :test #'(lambda (x y) 
-                                    (equal (car x) (car y))))))
-                      )
+                                     (unify-parts 
+                                      (append (get-classes-parts parents) parts)
+                                      'methods) 
+                                     :test #'(lambda (x y) 
+                                               (equal (car x) (car y))))))
+                       )
             ) class-name)
    )
-)
+  (let ((metodi (remove-duplicates (unify-parts 
+                                    (append (get-classes-parts parents) parts)
+                                    'methods) 
+                                  :test #'(lambda (x y) 
+                                            (equal (car x) (car y)))))) 
+    (process-method (caar metodi) (cdar metodi))
+    )
+  )
 ;;((name "ciao") (age 21 integer))
 (defun add-type (fields) 
   (mapcar 
@@ -58,7 +65,9 @@
 (defun check-fields-type (red-fields class) 
   (cond 
    ((null red-fields) T)
-   ((and (not (is-instance (cadar red-fields) class))
+   ((and (ignore-errors (not (subtypep class 't)) 
+        (not (is-instance (cadar red-fields) class))))
+    (and (subtypep (caddr (get-class-field class (caar red-fields))) 't) 
         (not (typep (cadar red-fields) (caddr (get-class-field class (caar red-fields))))))
     (error (format nil "[check-fields-type]: Field ~a is not of right type." 
                    (caar red-fields))))
@@ -159,13 +168,24 @@
 (defun get-data (instance field-name) 
   (cond 
    ((null instance) nil)
-   ((atom (first instance)) (get-data (third instance) field-name))
+   ((atom (car instance)) (get-data (caddr instance) field-name))
    ((and (symbolp (caar instance)) 
          (equal (intern (symbol-name (caar instance))) 
                 (intern (symbol-name field-name)))) 
     (if (null (cdar instance)) "undefined" (cdar instance))) 
    (T (get-data (cdr instance) field-name)))
 )
+
+(defun get-method (instance method-name)
+  (let ((methods (cdar (get-methods (cadr instance)))))
+    (cons #'(lambda (cons (append (list 'this) (cadr (find method-name methods :key #'car)))) (list (caddr (find method-name methods :key #'car))))))
+)
+
+(defun get-methods (class-name)
+  (cond ((null class-name) nil)
+        (t (cdddr (class-spec class-name))))
+)
+
 
 (defun get-parents (class) 
   (cond 
@@ -192,4 +212,39 @@
              (cond ((equal f-e-type part-type) 
                     (append (cdr first-element) 
                             (unify-parts (cdr separated-parts) part-type)))
-                   (t (unify-parts (cdr separated-parts) part-type)))))))
+                   (t (unify-parts (cdr separated-parts) part-type)))
+            )
+        )
+  )
+)
+
+;;; process-method: genera il codice necessaria per creare un metodo.
+(defun process-method (method-name method-spec)
+    (setf (fdefinition method-name) 
+            (lambda (this &rest args) 
+                ;; Applica funzione dell'istanza this con i parametri sotto
+                (apply (get-method this method-name) (append (list this) args))
+            ))
+    ;; Applica funzione dell'istanza this con i parametri sotto
+    (eval (rewrite-method-code method-name method-spec))
+)
+
+;;; rewrite-method-code: riscrive il metodo come una lambda
+(defun rewrite-method-code (method-name method-spec) 
+    ;; Riscrive il metodo come una funzione lambda 
+    (cons 'lambda 
+        (cons (append (list 'this) (car method-spec)) 
+              (cdr method-spec))
+    )
+)
+;;’(’ <arglist> <form>* ’)’ 
+
+;;; check-method: estrae i metodi dai vari slots passati 
+;;; come argomento elementi e li restituisce in una cons.
+(defun check-method (slots) 
+      ;;Estrae i metodi dagli slots 
+      (cond ((null slots) nil) 
+            ((and (listp (cadr slots)) (member '=> (cadr slots))) 
+                    (cons (car slots) 
+                          (cons (cadr slots) (check-method (cdr slots))))) 
+            (T (check-method (cdr slots)))))
