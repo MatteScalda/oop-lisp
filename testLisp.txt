@@ -1,6 +1,6 @@
 (def-class ’person nil ’(fields (name "Eve") (age 21 integer)))
 (def-class ’student ’(person) ’(fields (name "Eva Lu Ator") (university "Berkeley" string)) ’(methods (talk (&optional (out *standard-output*)) (format out "My name is ~A~%My age is ~D~%" (field this ’name) (field this ’age)))))
-(def-class 'prova nil '(fields (persona "" person)) '(methods (talk () (format out "My name is smalulu"))))
+(def-class 'prova nil '(fields (persona "" string)) '(methods (talk () (format out "My name is smalulu"))))
 (def-class 'prova2 nil '(fields (prova "" prova)))
 (defparameter eve (make ’person))
 (defparameter s1 (make ’student ’name "Eduardo De Filippo" ’age 108))
@@ -29,3 +29,19 @@
     (if (null (cdar instance)) "undefined" (cdar instance))) 
 
                 (apply (append (list 'lambda) (list append(list this)) (list(get-method this method-name))) (append (list this) args))
+
+(append (list 'this) (cadr (find method-name methods :key #'car)))
+
+(defun get-method (instance method-name)
+  (let ((methods (cdar (get-methods (cadr instance)))))
+    (lambda (this) (caddr (find method-name methods :key #'car)))
+          )
+)
+
+(defun get-method (instance method-name)
+  (let ((methods (cdar (get-methods (cadr instance)))))
+    (let ((method (caddr (find method-name methods :key #'car))))
+      (lambda (this &rest args) (apply method this args))
+    )
+  )
+)

@@ -176,16 +176,6 @@
    (T (get-data (cdr instance) field-name)))
 )
 
-(defun get-method (instance method-name)
-  (let ((methods (cdar (get-methods (cadr instance)))))
-    (cons #'(lambda (cons (append (list 'this) (cadr (find method-name methods :key #'car)))) (list (caddr (find method-name methods :key #'car))))))
-)
-
-(defun get-methods (class-name)
-  (cond ((null class-name) nil)
-        (t (cdddr (class-spec class-name))))
-)
-
 
 (defun get-parents (class) 
   (cond 
@@ -218,12 +208,27 @@
   )
 )
 
+(defun get-method (instance method-name)
+  (let ((methods (cdar (get-methods (cadr instance)))))
+    (let ((method (caddr (find method-name methods :key #'car))))
+      (lambda (&rest args) (apply method instance args))
+    )
+  )
+)
+
+(defun get-methods (class-name)
+  (cond ((null class-name) nil)
+        (t (cdddr (class-spec class-name))))
+)
+
 ;;; process-method: genera il codice necessaria per creare un metodo.
 (defun process-method (method-name method-spec)
     (setf (fdefinition method-name) 
             (lambda (this &rest args) 
                 ;; Applica funzione dell'istanza this con i parametri sotto
-                (apply (get-method this method-name) (append (list this) args))
+                (let ((metodo (get-method this method-name)))
+                  (apply metodo (append (list this) args))
+                )
             ))
     ;; Applica funzione dell'istanza this con i parametri sotto
     (eval (rewrite-method-code method-name method-spec))
@@ -248,3 +253,4 @@
                     (cons (car slots) 
                           (cons (cadr slots) (check-method (cdr slots))))) 
             (T (check-method (cdr slots)))))
+
