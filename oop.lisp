@@ -11,9 +11,11 @@
   (cond 
    ((or (not (atom class-name))
         (null class-name) 
-        (not (listp parents))) 
-    (error (format nil "Error [def-class]: Class-name or Parents invalid.")))
-   (t  (add-class-spec class-name 
+        (not (listp parents))
+        (not (ignore-errors (are-classes parents)))
+    ) 
+    (error (format nil "[def-class]: Class-name or Parents invalid.")))
+   (t  (and (add-class-spec class-name 
                       (append 
                        (list class-name)
                        (list parents) 
@@ -32,16 +34,25 @@
                                      :test #'(lambda (x y) 
                                                (equal (car x) (car y))))))
                        )
-            ) class-name)
-   )
-  (let ((metodi (remove-duplicates (unify-parts 
+             )
+             (let ((metodi (remove-duplicates (unify-parts 
                                     (append (get-classes-parts parents) parts)
                                     'methods) 
                                   :test #'(lambda (x y) 
                                             (equal (car x) (car y)))))) 
-    (process-method (caar metodi) (cdar metodi))
-    )
+                  (create-methods metodi)
+              )
+        ) class-name)
+   )
+)
+
+(defun create-methods (methods) 
+  (cond ((null methods) nil) 
+        (T (process-method (caar methods) (cdar methods)) 
+            (create-methods (cdr methods)))
   )
+)
+
 ;;((name "ciao") (age 21 integer))
 (defun add-type (fields) 
   (mapcar 
@@ -81,9 +92,10 @@
                               (split-in-pairs parts))
                       :test #'(lambda (x y) (equal (car x) (car y))))))
     (cond 
-     ((not (is-class class-name)) (error "[instantiate] La classe non esiste"))
-     ((null valid-parts) (error "[instantiate] I fields non sono validi"))   
-     ((not (check-fields-type valid-parts class-name)) (error (format nil "[instantiate] I fields non sono validi")))
+      ((not (is-class class-name)) (error "[instantiate] Class does not exist"))
+      ((or 
+        (null valid-parts)  (not (check-fields-type valid-parts class-name))
+      ) (error (format nil "[instantiate] Fields not valid.")))
      (t (append (list 'oolinst) 
                 (list class-name valid-parts)))
      )
@@ -117,11 +129,17 @@
 
 (defun is-class (class-name) 
   (cond 
-   ((null (class-spec class-name)) (error "[is-class] La classe non esiste"))
+   ((null (class-spec class-name)) (error "[is-class] Class does not exist"))
    (t t)
   )
 )
-
+(defun are-classes (classes-names)
+  (cond
+    ((null classes-names) t)
+    ((not (is-class (car classes-names))) nil)
+    (t (are-classes (cdr classes-names)))
+  )
+)
 (defun is-instance (value &optional (class-name T)) 
   (cond ((not (listp value)) nil)
         ((and (equal (first value) 'OOLINST) 
@@ -143,26 +161,27 @@
   (cond ((not (null (get-data instance field-name))) 
          (car (get-data instance field-name))) 
         ((get-data (class-spec (cadr instance)) field-name))
-        ((error 
+        (t (error 
           (format nil 
-                  "Error: no method or field named ~a found." field-name)))
+                  "[field] no method or field named ~a found." field-name)))
   )
 )
 
 (defun field* (instance &rest field-name)
   (cond 
-   ((null (is-instance (field instance (if (listp (car field-name)) 
-                                           (caar field-name) 
-                                           (car field-name))))) 
-    (error "Errore field* non è un'istanza"))
-   ((eq (length field-name) 1) 
+   ((eq (length (if (listp (car field-name)) 
+                        (car field-name) 
+                        nil)) 1) 
     (field instance (if (listp (car field-name)) 
                         (caar field-name) 
                         (car field-name))))
    (T (field* (field instance (if (listp (car field-name)) 
                                   (caar field-name) 
                                   (car field-name))) 
-              (cdr field-name))))
+              (if (listp (car field-name)) 
+                         (cdar field-name) 
+                         (cdr field-name))))
+  )
 )
 
 (defun get-data (instance field-name) 
@@ -171,8 +190,8 @@
    ((atom (car instance)) (get-data (caddr instance) field-name))
    ((and (symbolp (caar instance)) 
          (equal (intern (symbol-name (caar instance))) 
-                (intern (symbol-name field-name)))) 
-    (if (null (cdar instance)) "undefined" (cdar instance))) 
+                (intern (symbol-name field-name))))
+    (cdar instance))
    (T (get-data (cdr instance) field-name)))
 )
 
@@ -210,8 +229,10 @@
 
 (defun get-method (instance method-name)
   (let ((methods (cdar (get-methods (cadr instance)))))
-    (let ((method (caddr (find method-name methods :key #'car))))
-      (lambda (&rest args) (apply method instance args))
+    (let ((method-code (caddr (find method-name methods :key #'car))))
+      (let ((method-args (append (list 'this) (cadr (find method-name methods :key #'car)))))
+        (append (list 'lambda) (list method-args) (list method-code))
+      )
     )
   )
 )
@@ -222,35 +243,13 @@
 )
 
 ;;; process-method: genera il codice necessaria per creare un metodo.
-(defun process-method (method-name method-spec)
+(defun process-method (method-name)
     (setf (fdefinition method-name) 
-            (lambda (this &rest args) 
+            (lambda (instance &rest method-args)
                 ;; Applica funzione dell'istanza this con i parametri sotto
-                (let ((metodo (get-method this method-name)))
-                  (apply metodo (append (list this) args))
+                (let ((metodo (get-method instance method-name)))
+                  (apply (eval metodo) (append (list instance) method-args))
                 )
             ))
-    ;; Applica funzione dell'istanza this con i parametri sotto
-    (eval (rewrite-method-code method-name method-spec))
 )
-
-;;; rewrite-method-code: riscrive il metodo come una lambda
-(defun rewrite-method-code (method-name method-spec) 
-    ;; Riscrive il metodo come una funzione lambda 
-    (cons 'lambda 
-        (cons (append (list 'this) (car method-spec)) 
-              (cdr method-spec))
-    )
-)
-;;’(’ <arglist> <form>* ’)’ 
-
-;;; check-method: estrae i metodi dai vari slots passati 
-;;; come argomento elementi e li restituisce in una cons.
-(defun check-method (slots) 
-      ;;Estrae i metodi dagli slots 
-      (cond ((null slots) nil) 
-            ((and (listp (cadr slots)) (member '=> (cadr slots))) 
-                    (cons (car slots) 
-                          (cons (cadr slots) (check-method (cdr slots))))) 
-            (T (check-method (cdr slots)))))
 
