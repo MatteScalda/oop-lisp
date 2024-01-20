@@ -1,12 +1,11 @@
 (def-class ’person nil ’(fields (name "Eve") (age 21 integer)))
 (def-class ’student ’(person) ’(fields (name "Eva Lu Ator") (university "Berkeley" string)) ’(methods (talk (&optional (out *standard-output*)) (format out "My name is ~A~% My age is ~D~%" (field this ’name) (field this ’age)))))
 (def-class ’studente-bicocca ’(student) ’(methods (talk () (format t "Mi chiamo ~A, e studio alla Bicocca~%" (field this ’name)))) ’(fields (university "UNIMIB")))
-(def-class 'prova nil '(fields (persona "" string)) '(methods (talk () (format out "My name is smalulu"))))
+(def-class 'prova nil '(fields (persona "" string)) '(methods (talk () (format out "My name is prova"))))
 (def-class 'prova2 nil '(fields (prova "" prova)))
 (defparameter eve (make ’person))
 (defparameter s1 (make ’student ’name "Eduardo De Filippo" ’age 108))
 (defparameter s2 (make ’student))
-(defparameter s3 (make ’student ’age "42")) !!!DA ERRORE!!!
 (defparameter p1 (make prova 'persona eve))
 (defparameter p2 (make 'prova 'persona s1))
 (defparameter p3 (make 'prova2 'prova p1))
